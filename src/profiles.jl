@@ -44,7 +44,6 @@ function Fourier(
     Wk = similar(Uk)
 
     amp = if amplitude === nothing
-        # Infer dimensionful amplitudes from k->0 row
         vec(Uk[1, :])
     else
         length(amplitude) == nM || throw(ArgumentError("amplitude must have length(M) entries"))
@@ -52,13 +51,11 @@ function Fourier(
     end
 
     if amplitude === nothing
-        # Input is dimensionful; normalize internally to dimensionless Uk and keep Wk as given
         Wk .= Uk
         @inbounds for j in 1:nM
             Uk[:, j] ./= amp[j]
         end
     else
-        # Input is already dimensionless Uk; build dimensionful Wk
         @inbounds for j in 1:nM
             Wk[:, j] .= (amp[j] .* Uk[:, j]) ./ float(normalisation)
         end
@@ -72,23 +69,60 @@ end
 # NFW window functions
 # ------------------------------------------------------------
 
+"""Scalar NFW Fourier window from x ≡ k*rv and concentration c."""
+@inline function wnfw_xc(x::Float64, c::Float64)
+    ks = x / c
+    Sisv = sinint(ks + x)
+    Cisv = cosint(ks + x)
+    Sis = sinint(ks)
+    Cis = cosint(ks)
+
+    f1 = cos(ks) * (Cisv - Cis)
+    f2 = sin(ks) * (Sisv - Sis)
+    f3 = sin(x) / (ks + x)
+    f4 = log(1.0 + c) - c / (1.0 + c)
+    return (f1 + f2 - f3) / f4
+end
+
+"""
+In-place NFW Fourier window evaluation.
+`rv_eff` allows folding the HMcode bloating factor into radius (rv * ν^η).
+"""
+function win_NFW!(out::AbstractVector{Float64}, k::AbstractVector, rv_eff::Float64, c::Float64)
+    @inbounds for i in eachindex(k)
+        out[i] = wnfw_xc(k[i] * rv_eff, c)
+    end
+    return out
+end
+
 """Normalised Fourier transform for an NFW profile (scalar rv, c)."""
 function win_NFW(k::AbstractVector, rv::Real, c::Real)
-    rs = rv / c
-    kv = k .* rv
-    ks = k .* rs
+    out = Vector{Float64}(undef, length(k))
+    return win_NFW!(out, k, float(rv), float(c))
+end
 
-    Sisv = sinint.(ks .+ kv)
-    Cisv = cosint.(ks .+ kv)
-    Sis = sinint.(ks)
-    Cis = cosint.(ks)
-
-    f1 = @. cos(ks) * (Cisv - Cis)
-    f2 = @. sin(ks) * (Sisv - Sis)
-    f3 = @. sin(kv) / (ks + kv)
-    f4 = log(1.0 + c) - c / (1.0 + c)
-
-    return @. (f1 + f2 - f3) / f4
+"""
+In-place NFW+baryons profile.
+"""
+function win_NFW_baryons!(
+    out::AbstractVector{Float64},
+    k::AbstractVector,
+    rv_eff::Float64,
+    c::Float64,
+    M::Float64,
+    Mb::Float64,
+    fstar::Float64,
+    Om_m::Float64,
+    Om_c::Float64,
+    Om_b::Float64,
+)
+    win_NFW!(out, k, rv_eff, c)
+    fg = (Om_b / Om_m - fstar) * (M / Mb)^2 / (1.0 + (M / Mb)^2)
+    coeff = Om_c / Om_m + fg
+    @inbounds for i in eachindex(out)
+        out[i] = coeff * out[i] + fstar
+    end
+    return out
 end
 
 """
@@ -106,11 +140,20 @@ function win_NFW_baryons(
     Om_c::Real,
     Om_b::Real,
 )
-    Wk = win_NFW(k, rv, c)
-    fg = (Om_b / Om_m - fstar) * (M / Mb)^2 / (1.0 + (M / Mb)^2)
-    return @. (Om_c / Om_m + fg) * Wk + fstar
+    out = Vector{Float64}(undef, length(k))
+    return win_NFW_baryons!(
+        out,
+        k,
+        float(rv),
+        float(c),
+        float(M),
+        float(Mb),
+        float(fstar),
+        float(Om_m),
+        float(Om_c),
+        float(Om_b),
+    )
 end
-
 
 """
 Bullock et al. (2001)-style halo collapse redshifts used by HMcode concentration model.
