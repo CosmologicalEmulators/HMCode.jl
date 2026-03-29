@@ -85,14 +85,22 @@ function get_effective_index(Rnl::Real, R::AbstractVector, sigmaR::AbstractVecto
     -3.0 - 2.0 * derivative_from_samples(log(Rnl), log.(R), log.(sigmaR))
 end
 
+struct NonlinearRadiusRoot{F}
+    sigmaR_func::F
+    dc::Float64
+end
+@inline function (s::NonlinearRadiusRoot)(R::Float64)::Float64
+    return s.sigmaR_func(R) - s.dc
+end
+
 function get_nonlinear_radius(
     Rmin::Real,
     Rmax::Real,
     dc::Real,
-    sigmaR_func::Function,
+    sigmaR_func,
 )
-    root_func = R -> sigmaR_func(R) - dc
-    return find_zero(root_func, (float(Rmin), float(Rmax)), Bisection())
+    f = NonlinearRadiusRoot(sigmaR_func, float(dc))
+    return find_zero(f, (float(Rmin), float(Rmax)), Bisection())
 end
 
 """
@@ -101,7 +109,7 @@ Matches hmcode/cosmology.py::sigmaV (including optional tophat smoothing scale R
 """
 function sigmaV(
     R::Real,
-    Pk::Function;
+    Pk;
     kmin::Real = 0.0,
     kmax::Real = Inf,
     eps::Real = 1e-4,

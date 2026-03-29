@@ -111,9 +111,14 @@ function get_growth_interpolator(cosmo::HMcodeCosmology; LCDM::Bool=false)
     return extrapolate(itp, Line())
 end
 
-function get_accumulated_growth(a::Float64, g_func)
+struct GrowthDivX{F}
+    g_func::F
+end
+@inline (s::GrowthDivX)(x::Float64) = s.g_func(x) / x
+
+function get_accumulated_growth(a::Real, g_func)
     a_init = 1e-4
     missing_val = g_func(a_init)
-    G, _ = quadgk(x -> g_func(x) / x, a_init, a, rtol=1e-5)
+    G, _ = quadgk(GrowthDivX(g_func), a_init, a, rtol=1e-5)
     return G + missing_val
 end
