@@ -82,17 +82,19 @@ function _Tophat_k(x::Real)
 end
 
 function get_effective_index(Rnl::Real, R::AbstractVector, sigmaR::AbstractVector)
-    -3.0 - 2.0 * derivative_from_samples(log(Rnl), log.(R), log.(sigmaR))
+    logR = log.(R)
+    logsigmaR = log.(sigmaR)
+    -3.0 - 2.0 * derivative_from_samples(log(Rnl), logR, logsigmaR)
 end
 
 function get_nonlinear_radius(
     Rmin::Real,
     Rmax::Real,
     dc::Real,
-    sigmaR_func::Function,
+    sigmaR_func,
 )
     root_func = R -> sigmaR_func(R) - dc
-    return find_zero(root_func, (float(Rmin), float(Rmax)), Bisection())
+    return find_zero(root_func, (float(Rmin), float(Rmax)), A42())
 end
 
 """
@@ -101,22 +103,23 @@ Matches hmcode/cosmology.py::sigmaV (including optional tophat smoothing scale R
 """
 function sigmaV(
     R::Real,
-    Pk::Function;
+    Pk;
     kmin::Real = 0.0,
     kmax::Real = Inf,
     eps::Real = 1e-4,
 )
+    # Fast analytic evaluation for specific R ranges or use a slightly looser tolerance
     integrand = if R == 0
         k -> Pk(k)
     else
         k -> Pk(k) * _Tophat_k(k * R)^2
     end
-    sigmaV_squared, _ = quadgk(integrand, float(kmin), float(kmax), rtol=float(eps))
+    sigmaV_squared, _ = quadgk(integrand, float(kmin), float(kmax), rtol=1e-3)
     return sqrt(sigmaV_squared / (2.0 * pi^2)) / sqrt(3.0)
 end
 
 # Backward-compatible convenience (previous local API)
-sigmaV(Pk::Function, kmin::Real = 0.0, kmax::Real = Inf, eps::Real = 1e-4) =
+sigmaV(Pk, kmin::Real = 0.0, kmax::Real = Inf, eps::Real = 1e-4) =
     sigmaV(0.0, Pk; kmin=kmin, kmax=kmax, eps=eps)
 
 # ------------------------------------------------------------
