@@ -1,6 +1,8 @@
 # cosmology.jl
 using Interpolations
-using QuadGK
+using Integrals
+using OrdinaryDiffEqTsit5
+using OrdinaryDiffEqCore
 
 struct HMcodeCosmology
     Omega_m::Float64
@@ -83,29 +85,20 @@ function get_growth_interpolator(cosmo::HMcodeCosmology; LCDM::Bool=false)
     d = a_init^(1.0 - 3.0 * f_init / 5.0)
     v = (1.0 - 3.0 * f_init / 5.0) * a_init^(-3.0 * f_init / 5.0)
     
-    function deriv(a, y)
-        d_val, v_val = y
-        dxda = v_val
+    function growth_ode!(du, u, p, a)
+        d_val, v_val = u
+        cosmo, LCDM = p
         fv = -(2.0 + _AH(a, cosmo, LCDM=LCDM) / _Hubble2(a, cosmo, LCDM=LCDM)) * v_val / a
         fd = 1.5 * _Omega_m_a(a, cosmo, LCDM=LCDM) * d_val / a^2
-        return [dxda, fv + fd]
+        du[1] = v_val
+        du[2] = fv + fd
     end
     
-    g_vals = zeros(na)
-    g_vals[1] = d
-    y = [d, v]
+    u0 = [d, v]
+    prob = ODEProblem(growth_ode!, u0, (a_init, 1.0), (cosmo, LCDM))
+    sol = solve(prob, Tsit5(), reltol=1e-8, abstol=1e-8)
     
-    # RK4 integration
-    for i in 1:na-1
-        a_curr = a_vals[i]
-        h_step = a_vals[i+1] - a_curr
-        k1 = deriv(a_curr, y)
-        k2 = deriv(a_curr + h_step/2, y .+ h_step .* k1 ./ 2)
-        k3 = deriv(a_curr + h_step/2, y .+ h_step .* k2 ./ 2)
-        k4 = deriv(a_curr + h_step, y .+ h_step .* k3)
-        y .+= h_step .* (k1 .+ 2 .* k2 .+ 2 .* k3 .+ k4) ./ 6
-        g_vals[i+1] = y[1]
-    end
+    g_vals = [sol(a)[1] for a in a_vals]
     
     itp = scale(interpolate(g_vals, BSpline(Cubic(Line(OnGrid())))), a_vals)
     return extrapolate(itp, Line())
@@ -114,6 +107,7 @@ end
 function get_accumulated_growth(a::Float64, g_func)
     a_init = 1e-4
     missing_val = g_func(a_init)
-    G, _ = quadgk(x -> g_func(x) / x, a_init, a, rtol=1e-4)
+    prob = IntegralProblem((x, p) -> g_func(x) / x, (a_init, a))
+    G = solve(prob, QuadGKJL(), reltol=1e-4).u
     return G + missing_val
 end

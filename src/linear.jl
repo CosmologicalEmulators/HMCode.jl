@@ -1,6 +1,6 @@
 # linear.jl
 using Roots
-using QuadGK
+using Integrals
 
 # ------------------------------------------------------------
 # Utility equivalents
@@ -114,7 +114,8 @@ function sigmaV(
     else
         k -> Pk(k) * _Tophat_k(k * R)^2
     end
-    sigmaV_squared, _ = quadgk(integrand, float(kmin), float(kmax), rtol=1e-3)
+    prob = IntegralProblem((u, p) -> integrand(u), (float(kmin), float(kmax)))
+    sigmaV_squared = solve(prob, QuadGKJL(), reltol=1e-3).u
     return sqrt(sigmaV_squared / (2.0 * pi^2)) / sqrt(3.0)
 end
 

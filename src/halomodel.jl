@@ -1,6 +1,6 @@
 # halomodel.jl
 using Trapz
-using QuadGK
+using Integrals
 using SpecialFunctions
 
 const TINKER_Z_DEP = false
@@ -236,7 +236,8 @@ end
 Missing low-mass contribution to integral b(nu) g(nu) dnu in pyhalomodel.
 """
 function _missing_bias_mass(hmod::HaloModel, nu_min::Real)
-    val, _ = quadgk(nu -> mass_function_nu(hmod, nu) * linear_bias_nu(hmod, nu), float(nu_min), Inf)
+    prob = IntegralProblem((nu, p) -> mass_function_nu(hmod, nu) * linear_bias_nu(hmod, nu), (float(nu_min), Inf))
+    val = solve(prob, QuadGKJL()).u
     return 1.0 - val
 end
 
