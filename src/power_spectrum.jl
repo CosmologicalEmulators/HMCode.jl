@@ -102,7 +102,8 @@ function HMcodeWorkspace(k, zs, M_grid, cosmo, sigma_R_interp, Pk_lin_interp; nt
     growth_itp = get_growth_interpolator(cosmo, LCDM=false)
     growth_LCDM_itp = get_growth_interpolator(cosmo, LCDM=true)
     a_grid_inv = range(1e-4, 1.0, length=2000) |> collect
-    growth_itp_inverse = DI.LinearInterpolation(a_grid_inv, growth_itp.(a_grid_inv))
+    g_grid_inv = growth_itp.(a_grid_inv)
+    growth_itp_inverse = DI.LinearInterpolation(a_grid_inv, g_grid_inv)
     Sigma = zeros(nM, nz)
     for iz in 1:nz, iM in 1:nM; Sigma[iM, iz] = sigma_fast(R[iM], zs[iz]); end
     Pk_lin_mat = zeros(nk, nz)
@@ -182,7 +183,15 @@ function _assemble_slice!(Pk_out, iz, k, ws, hmpars, rhom, cosmo, tweaks, T_AGN,
         wv = Wbuf[iM, ik]
         W2buf[iM, ik] = wv * wv
     end
-    mul!(I1h, transpose(W2buf), w1h_iz); @. I1h = I1h * rhom
+    # mul!(I1h, transpose(W2buf), w1h_iz); @. I1h = I1h * rhom
+    # Manual loop for I1h to avoid potential mul!/transpose issues
+    @turbo for ik in 1:nk
+        val = 0.0
+        for iM in 1:nM
+            val += W2buf[iM, ik] * w1h_iz[iM]
+        end
+        I1h[ik] = val * rhom
+    end
     ks = hmpars.k_star[iz]
     @inbounds @fastmath for ik in 1:nk
         x = k[ik] / ks
@@ -229,7 +238,8 @@ function hmcode_power_single!(Pk_out, k, zs, cosmo, ws; T_AGN=nothing, tweaks=tr
         # So we can skip it if it's already computed.
         # For now, let's leave it as is to ensure correctness.
         compute_collapse_redshifts_fast!(view(ws.cc, :, iz), ws.M, z, dc, Om_m, growth, ws.growth_itp_inverse, SigmaREval(ws.sigma_fast, z))
-        a_obs = scalefactor_from_redshift(z); dolag = (growth(ac)/growth_LCDM(ac)) * (growth_LCDM(a_obs)/growth(a_obs)); rvs = cbrt(Dv)
+        a_obs = scalefactor_from_redshift(z); dolag = (growth(ac)/growth_LCDM(ac)) * (growth_LCDM(a_obs)/growth(a_obs))
+        rvs = cbrt(Dv)
         @inbounds @fastmath for iM in 1:nM
             zfv = ws.cc[iM, iz]
             ws.rv[iM, iz] = ws.R[iM] / rvs

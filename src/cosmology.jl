@@ -108,6 +108,6 @@ function get_accumulated_growth(a::Float64, g_func)
     a_init = 1e-4
     missing_val = g_func(a_init)
     prob = IntegralProblem((x, p) -> g_func(x) / x, (a_init, a))
-    G = solve(prob, QuadGKJL(), reltol=1e-4).u
+    G = solve(prob, QuadGKJL(), reltol=1e-6).u
     return G + missing_val
 end
