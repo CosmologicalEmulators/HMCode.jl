@@ -28,3 +28,8 @@ LoopVectorization = "0.12.173"
 OrdinaryDiffEqCore = "3.25.0"
 OrdinaryDiffEqTsit5 = "1.10.0"
 Polyester = "0.7.19"
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
