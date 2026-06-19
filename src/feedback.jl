@@ -12,3 +12,20 @@ function get_feedback_parameters(T_AGN::Float64)
     )
     return params
 end
+
+"""
+    feedback_stellar_fraction(feedback_params, z, Omega_b, Omega_m)
+
+HMCode2020 feedback stellar fraction, capped at the cosmic baryon fraction.
+This follows the original Fortran HMcode implementation, where `HMcode_sbar`
+applies `fix_maximum(..., Omega_b/Omega_m)`.
+"""
+@inline function feedback_stellar_fraction(
+    feedback_params::Dict{Symbol, Float64},
+    z::Real,
+    Omega_b::Real,
+    Omega_m::Real,
+)
+    fstar = feedback_params[:f0] * 10.0^(float(z) * feedback_params[:fz])
+    return min(fstar, float(Omega_b) / float(Omega_m))
+end

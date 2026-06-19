@@ -225,7 +225,11 @@ function hmcode_power_single!(Pk_out, k, zs, cosmo, ws; T_AGN=nothing, tweaks=tr
         amp_fb = ws.M ./ rhom; compute_weights_inplace!(ws.w1h_mat_fb, ws.M, ws.nu_mat, amp_fb, ws.gcol_buf[1], ws.wtcol_buf[1]); w1h_ptr = ws.w1h_mat_fb
     end
     if (T_AGN !== nothing) && (!tweaks)
-        for iz in 1:nz; z = zs[iz]; ws.Mb_vec[iz] = feedback_params[:Mb0] * 10.0^(z * feedback_params[:Mbz]); ws.fstar_vec[iz] = feedback_params[:f0] * 10.0^(z * feedback_params[:fz]); end
+        for iz in 1:nz
+            z = zs[iz]
+            ws.Mb_vec[iz] = feedback_params[:Mb0] * 10.0^(z * feedback_params[:Mbz])
+            ws.fstar_vec[iz] = feedback_stellar_fraction(feedback_params, z, Om_b, Om_m)
+        end
     end
     for iz in 1:nz
         z = zs[iz]; dc, Dv, B = hmpars.delta_c[iz], hmpars.Delta_v[iz], hmpars.B[iz]
